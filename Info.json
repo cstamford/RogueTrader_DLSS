@@ -1,0 +1,12 @@
+﻿{
+  "Id": "DLSS",
+  "DisplayName": "DLSS",
+  "Author": "",
+  "Version": "1.0.0",
+  "ManagerVersion": "0.25.0",
+  "Requirements": [],
+  "AssemblyName": "DLSS.dll",
+  "EntryMethod": "DLSS.Main.Load",
+  "HomePage": "",
+  "Repository": ""
+}
