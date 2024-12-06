@@ -27,6 +27,10 @@ public static class NativeInterop {
     };
 
     public static unsafe DlssQualityMode[] DlssGetQualityModes(Vector2Int displayResolution) {
+        if (_dlssGetQualityModes == null) {
+            return [];
+        }
+
         int numQualityModes = _dlssGetQualityModes((uint)displayResolution.x, (uint)displayResolution.y, null);
         DlssQualityMode[] ret = new DlssQualityMode[numQualityModes];
 
@@ -43,12 +47,22 @@ public static class NativeInterop {
         return ret;
     }
 
-    public static unsafe void DlssSetQualityMode(DlssQualityMode qualityMode) {
+    public static unsafe bool DlssSetQualityMode(DlssQualityMode qualityMode) {
+        if (_dlssSetQualityMode == null) {
+            return false;
+        }
+
         _dlssSetQualityMode(&qualityMode);
+        return true;
     }
 
-    public static unsafe void DlssEvaluate(IntPtr colorIn, IntPtr colorOut, DlssDispatchParams param) {
+    public static unsafe bool DlssEvaluate(IntPtr colorIn, IntPtr colorOut, DlssDispatchParams param) {
+        if (_dlssEvaluate == null) {
+            return false;
+        }
+
         _dlssEvaluate(colorIn, colorOut, &param);
+        return true;
     }
 
     static unsafe NativeInterop() {
@@ -57,7 +71,7 @@ public static class NativeInterop {
             _dlssSetQualityMode = Marshal.GetDelegateForFunctionPointer<FnSetQualityMode>(GetProcAddress(IntPtr.Zero, "DLSS_SetQualityMode"));
             _dlssEvaluate = Marshal.GetDelegateForFunctionPointer<FnEvaluate>(GetProcAddress(IntPtr.Zero, "DLSS_Evaluate"));
         } catch (Exception ex) {
-            Debug.LogWarning($"Failed to acquire native addresses - {ex}");
+            Debug.LogWarning($"Failed to acquire native addresses for DLSS - activating DLSS won't upscale correctly - {ex}");
         }
     }
 

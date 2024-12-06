@@ -2,21 +2,22 @@
 using System;
 using System.Reflection;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering.RenderGraphModule;
 using UnityModManagerNet;
 
-using static DLSS.NativeInterop;
+// TODO:
+// 1. Cloaks do not have presence in motion vectors - heavy ghosting behind them.
 
 namespace DLSS;
 
-public static class CustomRenderState {
-    public static UpscaleConfiguration UpscaleConfig;
-    public static TextureHandle UpscaleCameraColor;
-    public static int NextConfigChangeFrameIdx = 0;
+public enum UpscaleType {
+    Vanilla,
+    Dlss,
+    Fsr,
+    XeSS
 }
 
 public class ModSettings : UnityModManager.ModSettings {
-    public UpscaleType UpscaleType = UpscaleType.None;
+    public UpscaleType UpscaleType = UpscaleType.Dlss;
     public float UpscaleRatio = 0.33f;
 }
 
@@ -35,12 +36,9 @@ public static class Main {
         modEntry.OnGUI = OnGUI;
         modEntry.OnSaveGUI = OnSaveGUI;
 
-        try {
-            _harmony = new Harmony(modEntry.Info.Id);
-            _harmony.PatchAll(Assembly.GetExecutingAssembly());
-        } catch (Exception ex) {
-            Debug.LogError(ex);
-        }
+        _harmony ??= new Harmony(modEntry.Info.Id);
+        _harmony.PatchAll(Assembly.GetExecutingAssembly());
+
         return true;
     }
 
@@ -71,57 +69,6 @@ public static class Main {
     }
 #endif
 
-
     private static Harmony _harmony;
 }
 
-public enum UpscaleType {
-    None,
-    Dlss,
-    Fsr,
-    XeSS
-}
-
-public interface IUpscaleConfiguration {
-    public UpscaleType UpscaleType {
-        get;
-    }
-
-    public Vector2Int RenderResolution {
-        get;
-    }
-
-    public Vector2Int DisplayResolution {
-        get;
-    }
-
-    public float UpscaleRatio {
-        get;
-    }
-}
-
-public abstract record class UpscaleConfiguration(
-    UpscaleType UpscaleType,
-    Vector2Int RenderResolution,
-    Vector2Int DisplayResolution
-) : IUpscaleConfiguration {
-    public float UpscaleRatio => (float)RenderResolution.x / DisplayResolution.x;
-}
-
-public record class VanillaUpscaleConfiguration(
-    Vector2Int RenderResolution,
-    Vector2Int DisplayResolution
-) : UpscaleConfiguration(UpscaleType.None, RenderResolution, DisplayResolution);
-
-public record class DlssUpscaleConfiguration(
-    Vector2Int RenderResolution,
-    Vector2Int DisplayResolution
-) : UpscaleConfiguration(UpscaleType.Dlss, RenderResolution, DisplayResolution) {
-    public DlssQualityMode Mode => new() {
-        Name = IntPtr.Zero,
-        InputWidth = (uint)RenderResolution.x,
-        InputHeight = (uint)RenderResolution.y,
-        FinalWidth = (uint)DisplayResolution.x,
-        FinalHeight = (uint)DisplayResolution.y
-    };
-}

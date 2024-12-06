@@ -1,10 +1,12 @@
 ﻿using HarmonyLib;
-using Kingmaker.Visual;
 using Owlcat.Runtime.Visual.Waaagh;
 using Owlcat.Runtime.Visual.Waaagh.Passes;
+using Owlcat.Runtime.Visual.Waaagh.Passes.Base;
 using Owlcat.Runtime.Visual.Waaagh.Passes.PostProcess;
+using Owlcat.Runtime.Visual.Waaagh.RendererFeatures.Highlighting.Passes;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection.Emit;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering.RenderGraphModule;
@@ -14,34 +16,52 @@ using static DLSS.NativeInterop;
 
 namespace DLSS;
 
+public static class CustomRenderState {
+    public static UpscaleType UpscaleType = UpscaleType.Vanilla;
+    public static float UpscaleRatio = 0.0f;
+    public static TextureHandle UpscaleCameraColor;
+}
+
 [HarmonyPatch]
 public static class PatchCustomUpscalePass {
     [HarmonyPostfix]
     [HarmonyPatch(typeof(WaaaghRenderer), nameof(WaaaghRenderer.Setup))]
-    private static void WaaaghRenderer_Setup(WaaaghRenderer __instance, ScriptableRenderContext context, in RenderingData renderingData) {
-        List<CameraStackManager.CameraInfo> camInfo = [];
-        CameraStackManager.Instance.GetStack(camInfo);
+    private static void WaaaghRenderer_Setup(WaaaghRenderer __instance, in RenderingData renderingData) {
+        _upscalePass ??= new(RenderPassEvent.BeforeRenderingPostProcessing - 1, __instance.Settings.Shaders.FinalBlitShader);
 
-        Camera ourCamera = renderingData.CameraData.Camera;
-        int camIdx = camInfo.FindIndex(x => x.camera == ourCamera);
-
-        if (camIdx == -1 ||
-            (camInfo[camIdx].cameraStackType & CameraStackManager.CameraStackType.Main) == 0 ||
-            !camInfo[camIdx].additionalCameraData.AllowRenderScaling) {
-            return;
-        }
-
-        _upscalePass ??= new(RenderPassEvent.BeforeRenderingPostProcessing - 1);
-
-        if (CustomRenderState.UpscaleConfig.UpscaleType != UpscaleType.None) {
+        if (Util.CanApplyPipelineChanges(renderingData.CameraData)) {
             __instance.EnqueuePass(_upscalePass);
+
+            // Ensure we have motion vectors (would otherwise be disabled due to TAA disabled).
+            if (!__instance.m_ActiveRenderPassQueue.Any(x => x is CameraMotionVectorsPass)) {
+                __instance.EnqueuePass(__instance.m_CameraMotionVectorsPass);
+            }
+
+            if (!__instance.m_ActiveRenderPassQueue.Any(x => x is ObjectMotionVectorsPass)) {
+                __instance.EnqueuePass(__instance.m_ObjectMotionVectorsPass);
+            }
+
+            if (!__instance.m_ActiveRenderPassQueue.Any(x => x is CameraSetupPass)) {
+                __instance.EnqueuePass(__instance.m_CameraSetupAfterTaa);
+            }
+
+            // Move highlighting pass to before upscale pass, preventing instability (and increasing quality).
+            if (__instance.m_ActiveRenderPassQueue.FirstOrDefault(x => x is HighlighterPass) is HighlighterPass highlighter) {
+                highlighter.RenderPassEvent = _upscalePass.RenderPassEvent - 1;
+            }
         }
     }
 
     [HarmonyPostfix]
+    [HarmonyPatch(typeof(WaaaghPipeline), nameof(WaaaghPipeline.CheckPostProcessForDepth))]
+    private static void WaaaghPipeline_CheckPostProcessForDepth(in CameraData cameraData, ref bool __result) {
+        __result = __result || Util.CanApplyPipelineChanges(cameraData);
+    }
+
+    [HarmonyPostfix]
     [HarmonyPatch(typeof(FinalBlitPass), nameof(FinalBlitPass.Setup))]
-    private static void FinalBlitPass_Setup(ref FinalBlitPass.PassData data) {
-        if (CustomRenderState.UpscaleConfig.UpscaleType != UpscaleType.None && data.IntermediateBlitType == FinalBlitPass.IntermediateBlitType.Easu) {
+    private static void FinalBlitPass_Setup(ref FinalBlitPass.PassData data, ref RenderingData renderingData) {
+        if (Util.CanApplyPipelineChanges(renderingData.CameraData) && data.IntermediateBlitType == FinalBlitPass.IntermediateBlitType.Easu) {
             data.IntermediateBlitType = FinalBlitPass.IntermediateBlitType.NearestNeighbour;
         }
     }
@@ -52,7 +72,6 @@ public static class PatchCustomUpscalePass {
 [HarmonyPatch]
 public static class PatchCameraColorBufferAccess {
     private static int _currentCameraIndex;
-    private static bool _currentCameraShouldBeScaled;
     private static int _upscaleDispatchCameraIdx;
 
     [HarmonyTranspiler]
@@ -68,7 +87,7 @@ public static class PatchCameraColorBufferAccess {
     }
 
     private static void ScriptableRenderer_Execute_Impl(ScriptableRenderPass pass, ref RenderingData data) {
-        if (CustomRenderState.UpscaleConfig.UpscaleType == UpscaleType.None) {
+        if (!Util.CanApplyPipelineChanges(data.CameraData)) {
             pass.Execute(ref data);
             return;
         }
@@ -80,14 +99,12 @@ public static class PatchCameraColorBufferAccess {
         // Cam2 (UI) -> [ work..., FinalBlitPass ]
 
         RenderGraphResources resources = data.CameraData.Renderer.RenderGraphResources;
-        bool haveRunUpscaleDispatch = _upscaleDispatchCameraIdx != -1;
-
-        if (haveRunUpscaleDispatch) { // Resources should draw from original CameraColor (now copied over).
+        if (_upscaleDispatchCameraIdx != -1) { // Resources should draw from original CameraColor (now copied over).
             resources.CameraColorBuffer = resources.m_CameraNonScaledColorBuffer;
         } else { // Leave resources alone - they're already set up OK.
             Debug.Assert(
-                (_currentCameraShouldBeScaled && resources.CameraColorBuffer.handle == resources.m_CameraScaledColorBuffer.handle) ||
-                (!_currentCameraShouldBeScaled && resources.CameraColorBuffer.handle == resources.m_CameraNonScaledColorBuffer.handle)
+                (Util.CanScaleCamera(data.CameraData) && resources.CameraColorBuffer.handle == resources.m_CameraScaledColorBuffer.handle) ||
+                (!Util.CanScaleCamera(data.CameraData) && resources.CameraColorBuffer.handle == resources.m_CameraNonScaledColorBuffer.handle)
             );
         }
 
@@ -100,79 +117,84 @@ public static class PatchCameraColorBufferAccess {
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(WaaaghPipeline), nameof(WaaaghPipeline.RenderCameraStack))]
-    // Start-of-frame reset (back to scaled buffer).
-    private static void WaaaghPipeline_RenderCameraStack(WaaaghPipeline __instance) {
+    private static void WaaaghPipeline_RenderCameraStack() {
         _currentCameraIndex = -1;
-        _currentCameraShouldBeScaled = false;
         _upscaleDispatchCameraIdx = -1;
     }
 
     [HarmonyPatch(typeof(WaaaghPipeline), nameof(WaaaghPipeline.InitializeCameraData))]
-    // First camera only.
     private static class WaaaghPipeline_InitializeCameraData {
         [HarmonyPrefix]
-        private static void Before(Camera camera, WaaaghAdditionalCameraData additionalCameraData, int cameraIndex) {
+        private static void Before(WaaaghPipeline __instance, int cameraIndex) {
             Debug.Assert(cameraIndex == 0);
             _currentCameraIndex = cameraIndex;
-            _currentCameraShouldBeScaled = additionalCameraData.AllowRenderScaling;
-
-            if (Time.frameCount >= CustomRenderState.NextConfigChangeFrameIdx && (
-                CustomRenderState.UpscaleConfig == null ||
-                CustomRenderState.UpscaleConfig.UpscaleType != Main.Settings.UpscaleType ||
-                !Mathf.Approximately(CustomRenderState.UpscaleConfig.UpscaleRatio, Main.Settings.UpscaleRatio)
-            )) {
-                Vector2Int displayResolution = new((int)camera.pixelRect.width, (int)camera.pixelRect.height);
-                Vector2Int renderResolution = new((int)(displayResolution.x * Main.Settings.UpscaleRatio), (int)(displayResolution.y * Main.Settings.UpscaleRatio));
-
-                if (Main.Settings.UpscaleType != UpscaleType.None && Main.Settings.UpscaleType != UpscaleType.Dlss) {
-                    Debug.LogError($"Unsupported upscale type {Main.Settings.UpscaleType}, reverting to {UpscaleType.None}");
-                    Main.Settings.UpscaleType = UpscaleType.None;
-                }
-
-                switch (Main.Settings.UpscaleType) {
-                    case UpscaleType.None:
-                        CustomRenderState.UpscaleConfig = new VanillaUpscaleConfiguration(renderResolution, displayResolution);
-                        break;
-                    case UpscaleType.Dlss:
-                        DlssUpscaleConfiguration dlss = new(renderResolution, displayResolution);
-                        DlssSetQualityMode(dlss.Mode);
-                        CustomRenderState.UpscaleConfig = dlss;
-                        break;
-                    default:
-                        throw new();
-                }
-
-                WaaaghPipeline.Asset.RenderScale = CustomRenderState.UpscaleConfig.UpscaleRatio;
-                CustomRenderState.NextConfigChangeFrameIdx = Time.frameCount + 5;
-            }
+            _renderGraph = __instance.m_RenderGraph;
+            WaaaghPipeline.Asset.RenderScale = Main.Settings.UpscaleRatio;
         }
 
         [HarmonyPostfix]
-        private static void After(in CameraData cameraData, RenderGraph ___m_RenderGraph) {
-            TextureDesc desc = Util.CreateColorTargetDesc("CameraColorUpscaled", cameraData.CameraTargetDescriptor, CustomRenderState.UpscaleConfig.DisplayResolution.x, CustomRenderState.UpscaleConfig.DisplayResolution.y);
-
-            if (!CustomRenderState.UpscaleCameraColor.IsValid()) {
-                CustomRenderState.UpscaleCameraColor = ___m_RenderGraph.m_Resources.CreateSharedTexture(desc, explicitRelease: true);
-                _lastUpscaleTextureDesc = desc;
+        private static void After(ref CameraData cameraData) {
+            if (!Util.CanScaleCamera(cameraData)) {
+                return;
             }
 
-            if (_lastUpscaleTextureDesc.width != desc.width || _lastUpscaleTextureDesc.height != desc.height) {
-                ___m_RenderGraph.m_Resources.RefreshSharedTextureDesc(CustomRenderState.UpscaleCameraColor, desc);
-                _lastUpscaleTextureDesc = desc;
+            int renderWidth = cameraData.ScaledCameraTargetViewportSize.x;
+            int renderHeight = cameraData.ScaledCameraTargetViewportSize.y;
+            int displayWidth = cameraData.NonScaledCameraTargetViewportSize.x;
+            int displayHeight = cameraData.NonScaledCameraTargetViewportSize.y;
 
+            bool needReapply = CustomRenderState.UpscaleType != Main.Settings.UpscaleType;
+            needReapply |= CustomRenderState.UpscaleRatio != cameraData.RenderScale;
+
+            if (needReapply) {
+                CustomRenderState.UpscaleType = Main.Settings.UpscaleType;
+                CustomRenderState.UpscaleRatio = cameraData.RenderScale;
+
+                if (CustomRenderState.UpscaleType == UpscaleType.Dlss) {
+                    DlssSetQualityMode(new() {
+                        InputWidth = (uint)renderWidth,
+                        InputHeight = (uint)renderHeight,
+                        FinalWidth = (uint)displayWidth,
+                        FinalHeight = (uint)displayHeight
+                    });
+                }
+            }
+
+            if (Util.CanApplyPipelineChanges(cameraData)) {
+                cameraData.Antialiasing = AntialiasingMode.None;
+                TextureDesc desc = Util.CreateColorTargetDesc("CameraColorUpscaled", cameraData.CameraTargetDescriptor, displayWidth, displayHeight);
+                CustomRenderState.UpscaleCameraColor = EnsureUpscaleTexture(desc);
             }
         }
 
-        private static TextureDesc _lastUpscaleTextureDesc;
+        private static TextureHandle EnsureUpscaleTexture(TextureDesc desc) {
+            if (!_lastUpscaleTextureDesc.TryGetValue(desc.name, out (TextureHandle Handle, TextureDesc Desc) current)) {
+                current = (_renderGraph.m_Resources.CreateSharedTexture(desc, explicitRelease: true), desc);
+                _lastUpscaleTextureDesc[desc.name] = current;
+            }
+
+            if (current.Desc.width != desc.width || current.Desc.height != desc.height) {
+                _renderGraph.m_Resources.RefreshSharedTextureDesc(current.Handle, desc);
+                current = (current.Handle, desc);
+                _lastUpscaleTextureDesc[desc.name] = current;
+            }
+
+            Debug.Assert(current.Handle.IsValid());
+            Debug.Assert(current.Desc.width == desc.width);
+            Debug.Assert(current.Desc.height == desc.height);
+
+            return current.Handle;
+        }
+
+        private readonly static Dictionary<string, (TextureHandle, TextureDesc)> _lastUpscaleTextureDesc = [];
+        private static RenderGraph _renderGraph;
     }
 
     [HarmonyPostfix]
     [HarmonyPatch(typeof(WaaaghPipeline), nameof(WaaaghPipeline.InitializeAdditionalCameraData))]
-    // All cameras beyond first.
     private static void WaaaghPipeline_InitializeAdditionalCameraData(WaaaghAdditionalCameraData additionalCameraData, int cameraIndex) {
         Debug.Assert(cameraIndex > 0);
         _currentCameraIndex = cameraIndex;
-        _currentCameraShouldBeScaled = additionalCameraData.AllowRenderScaling;
     }
 }
 
@@ -183,6 +205,7 @@ public static class PatchFullResolutionPostProcessing {
     private static IEnumerable<CodeInstruction> PostProcessPass_RecordRenderGraph(IEnumerable<CodeInstruction> instructions) {
         foreach (CodeInstruction inst in instructions) {
             if (inst.StoresField(AccessTools.Field(typeof(PostProcessPass), nameof(PostProcessPass.m_Desc)))) {
+                yield return new(OpCodes.Ldarg_1);
                 yield return new(OpCodes.Call, AccessTools.Method(typeof(PatchFullResolutionPostProcessing), nameof(ModifyPostProcessingDesc)));
             }
 
@@ -190,41 +213,48 @@ public static class PatchFullResolutionPostProcessing {
         }
     }
 
-    private static TextureDesc ModifyPostProcessingDesc(TextureDesc current) =>
-        CustomRenderState.UpscaleConfig.UpscaleType == UpscaleType.None
-            ? current
-            : current with {
-                width = CustomRenderState.UpscaleConfig.DisplayResolution.x,
-                height = CustomRenderState.UpscaleConfig.DisplayResolution.y
-            };
+    private static TextureDesc ModifyPostProcessingDesc(TextureDesc current, in RenderingData renderingData) =>
+        Util.CanApplyPipelineChanges(renderingData.CameraData) ? current with {
+            width = renderingData.CameraData.NonScaledCameraTargetViewportSize.x,
+            height = renderingData.CameraData.NonScaledCameraTargetViewportSize.y
+        } : current;
 }
 
 [HarmonyPatch]
 public static class PatchJitter {
-    [HarmonyPrefix]
-    [HarmonyPatch(typeof(WaaaghCameraBuffer), nameof(WaaaghCameraBuffer.UpdateJitterMatrix))]
-    private static bool WaaaghCameraBuffer_UpdateJitterMatrix(WaaaghCameraBuffer __instance) {
-        if (CustomRenderState.UpscaleConfig == null || CustomRenderState.UpscaleConfig.UpscaleType == UpscaleType.None) {
-            return true;
+
+    [HarmonyTranspiler]
+    [HarmonyPatch(typeof(WaaaghPipeline), nameof(WaaaghPipeline.InitializeAdditionalCameraData))]
+    private static IEnumerable<CodeInstruction> WaaaghPipeline_InitializeAdditionalCameraData(IEnumerable<CodeInstruction> instructions) {
+        CodeInstruction mostRecentLdargS = null;
+
+        foreach (CodeInstruction inst in instructions) {
+            if (inst.opcode == OpCodes.Ldarg_S) {
+                mostRecentLdargS = inst;
+            }
+
+            if (inst.Calls(AccessTools.Method(typeof(WaaaghCameraBuffer), nameof(WaaaghCameraBuffer.Update)))) {
+                yield return mostRecentLdargS; // load cameraData
+                yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(PatchJitter), nameof(UpdateCameraBufferWithCameraData)));
+            } else {
+                yield return inst;
+            }
         }
+    }
 
-        __instance.m_Jitter = Vector2.zero;
-        __instance.m_JitterUV = Vector2.zero;
-        __instance.JitterMatrix = Matrix4x4.identity;
+    private static void UpdateCameraBufferWithCameraData(WaaaghCameraBuffer buffer, in CameraData cameraData) {
+        buffer.Update();
 
-        if (__instance.Camera.GetWaaaghAdditionalCameraData().AllowRenderScaling) {
-            Vector2Int renderResolution = CustomRenderState.UpscaleConfig.RenderResolution;
-            float upscaleRatio = 1.0f / CustomRenderState.UpscaleConfig.UpscaleRatio;
-
+        if (Util.CanApplyPipelineChanges(cameraData)) {
             int basePhaseCount = 8;
-            int totalPhases = (int)(basePhaseCount * Math.Pow(upscaleRatio, 2));
+            int totalPhases = (int)(basePhaseCount * Math.Pow(1 / cameraData.RenderScale, 2));
             int index = (Time.frameCount % totalPhases) + 1;
 
-            __instance.m_Jitter = new(HaltonSequence.Get(index, 2) - 0.5f, HaltonSequence.Get(index, 3) - 0.5f);
-            __instance.m_JitterUV = __instance.m_Jitter * new Vector2(2.0f / renderResolution.x, 2.0f / renderResolution.y);
-            __instance.JitterMatrix = Matrix4x4.Translate(new Vector3(__instance.m_JitterUV.x, __instance.m_JitterUV.y, 0));
-        }
+            Vector2Int renderResolution = cameraData.ScaledCameraTargetViewportSize;
 
-        return false;
+            buffer.m_Jitter = new(HaltonSequence.Get(index, 2) - 0.5f, HaltonSequence.Get(index, 3) - 0.5f);
+            buffer.m_JitterUV = buffer.m_Jitter * new Vector2(2.0f / renderResolution.x, 2.0f / renderResolution.y);
+            buffer.JitterMatrix = Matrix4x4.Translate(new Vector3(buffer.m_JitterUV.x, buffer.m_JitterUV.y, 0));
+        }
     }
 }
