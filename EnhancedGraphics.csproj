@@ -3,12 +3,12 @@
 
 	<PropertyGroup>
 		<TargetFramework>net481</TargetFramework>
-		<AssemblyName>DLSS</AssemblyName>
+		<AssemblyName>EnhancedGraphics</AssemblyName>
 		<Description>DLSS</Description>
 		<Version>1.0.0</Version>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<LangVersion>latest</LangVersion>
-		<RootNamespace>DLSS</RootNamespace>
+		<RootNamespace>EnhancedGraphics</RootNamespace>
 		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 		<RestoreAdditionalProjectSources>https://api.nuget.org/v3/index.json</RestoreAdditionalProjectSources>
 		<RogueTraderData>$(LocalAppData)Low\Owlcat Games\Warhammer 40000 Rogue Trader</RogueTraderData>

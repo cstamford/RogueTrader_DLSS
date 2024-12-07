@@ -1,19 +1,23 @@
-﻿using Owlcat.Runtime.Visual;
+﻿using Kingmaker.Settings;
+using Kingmaker.Settings.Graphics;
+using Owlcat.Runtime.Visual;
 using Owlcat.Runtime.Visual.Waaagh;
+using Owlcat.Runtime.Visual.Waaagh.Data;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Experimental.Rendering.RenderGraphModule;
 using UnityEngine.Rendering;
 
-namespace DLSS;
+namespace EnhancedGraphics;
 
 public static class Util {
-    public static TextureDesc CreateColorTargetDesc(string name, RenderTextureDescriptor descriptor, int width, int height) =>
-        CreateColorTargetDesc(name, descriptor, (uint)width, (uint)height);
-    public static TextureDesc CreateColorTargetDesc(string name, RenderTextureDescriptor descriptor, uint width, uint height) {
+    public static WaaaghPipelineAsset RenderSettings => WaaaghPipeline.Asset;
+    public static GraphicsSettingsController GraphicsSettings => SettingsController.Instance?.GraphicsSettingsController;
+
+    public static TextureDesc CreateColorTargetDesc(string name, RenderTextureDescriptor descriptor, Vector2Int size) {
         TextureDesc desc = RenderingUtils.CreateTextureDesc(name, descriptor);
-        desc.width = (int)width;
-        desc.height = (int)height;
+        desc.width = size.x;
+        desc.height = size.y;
         desc.depthBufferBits = DepthBits.None;
         desc.filterMode = FilterMode.Bilinear;
         desc.wrapMode = TextureWrapMode.Clamp;
@@ -21,12 +25,10 @@ public static class Util {
         return desc;
     }
 
-    public static TextureDesc CreateDepthTargetDesc(string name, RenderTextureDescriptor descriptor, int width, int height) =>
-        CreateDepthTargetDesc(name, descriptor, (uint)width, (uint)height);
-    public static TextureDesc CreateDepthTargetDesc(string name, RenderTextureDescriptor descriptor, uint width, uint height) {
+    public static TextureDesc CreateDepthTargetDesc(string name, RenderTextureDescriptor descriptor, Vector2Int size) {
         TextureDesc desc = RenderingUtils.CreateTextureDesc(name, descriptor);
-        desc.height = (int)height;
-        desc.width = (int)width;
+        desc.height = size.x;
+        desc.width = size.y;
         desc.colorFormat = GraphicsFormat.D24_UNorm_S8_UInt;
         desc.depthBufferBits = DepthBits.Depth32;
         desc.filterMode = FilterMode.Point;
@@ -36,5 +38,8 @@ public static class Util {
     public static bool CanScaleCamera(CameraData data) =>
         data.CameraRenderTargetBufferType == CameraRenderTargetType.Scaled &&
         data.UpscalingFilter == ImageUpscalingFilter.FSR;
-    public static bool CanApplyPipelineChanges(CameraData data) => CustomRenderState.UpscaleType != UpscaleType.Vanilla && CanScaleCamera(data);
+
+    public static bool CanApplyPipelineChanges(CameraData data) =>
+        EnhancedGraphics.Upscaler != null &&
+        CanScaleCamera(data);
 }
