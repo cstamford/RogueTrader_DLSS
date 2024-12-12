@@ -4,9 +4,11 @@ Adds DLSS to Warhammer 40k: RT.
 
 ## Why use?
 
-1. Signficiantly better image quality compared to FSR, especially at lower render resolution. [Comparisons](https://imgsli.com/MzI2NzMw/2/5)
-2. Significant better image stability (lack of shimmering) compared to FSR.
+1. Improved image quality compared to FSR, especially at lower render resolution.
+2. Improved image stability (lack of shimmering) compared to FSR.
 3. Less blurry/more detailed compared to FSR due to upscaling now happening before post processing.
+
+[Comparisons](https://imgsli.com/MzI2NzMw/2/5)
 
 ## Installation
 
