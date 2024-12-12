@@ -10,11 +10,6 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering.RenderGraphModule;
 using UnityModManagerNet;
 
-// TODO:
-// 1. Cloaks do not have presence in motion vectors - heavy ghosting behind them.
-// 2. Add option for full-res character doll 
-// 3. Certain particles seem to be scaled incorrectly
-
 namespace EnhancedGraphics;
 
 public class EGSettings : UnityModManager.ModSettings {
