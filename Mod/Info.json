@@ -1,0 +1,12 @@
+﻿{
+  "Id": "EnhancedGraphics",
+  "DisplayName": "EnhancedGraphics",
+  "Author": "",
+  "Version": "1.0.0",
+  "ManagerVersion": "0.25.0",
+  "Requirements": [],
+  "AssemblyName": "EnhancedGraphics.dll",
+  "EntryMethod": "EnhancedGraphics.EnhancedGraphics.Load",
+  "HomePage": "",
+  "Repository": ""
+}

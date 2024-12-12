@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="Src/Main.cpp" />
+    <ClCompile Include="Src/Util.cpp" />
+    <ClCompile Include="Src/Services.cpp" />
+    <ClCompile Include="Src/Services/DLSS.cpp">
+      <Filter>Services</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Services\Platform\D3D11\D3D11.cpp">
+      <Filter>Services\Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Services\Platform\DXGI\DXGI.cpp">
+      <Filter>Services\Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Services\Debug\DisableSteamAppRestart.cpp">
+      <Filter>Services\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Services\Debug\Inspector.cpp">
+      <Filter>Services\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="ext\imgui\imgui.cpp" />
+    <ClCompile Include="ext\imgui\imgui_demo.cpp" />
+    <ClCompile Include="ext\imgui\imgui_draw.cpp" />
+    <ClCompile Include="ext\imgui\imgui_impl_dx11.cpp" />
+    <ClCompile Include="ext\imgui\imgui_impl_win32.cpp" />
+    <ClCompile Include="ext\imgui\imgui_stdlib.cpp" />
+    <ClCompile Include="ext\imgui\imgui_tables.cpp" />
+    <ClCompile Include="ext\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="src\Services\Platform\DXGI\DXGI_Util.cpp" />
+    <ClCompile Include="src\Services\Platform\D3D11\D3D11_Util.cpp" />
+    <ClCompile Include="src\Services\Platform\D3D11\D3D11_Device.cpp" />
+    <ClCompile Include="src\Services\Platform\D3D11\_D3D11.hpp" />
+    <ClCompile Include="src\Services\Platform\D3D11\D3D11_DeviceContext.cpp" />
+    <ClCompile Include="src\Services\Platform\DXGI\DXGI_Factory.cpp" />
+    <ClCompile Include="src\Services\Platform\DXGI\DXGI_SwapChain.cpp" />
+    <ClCompile Include="src\Services\ImGUIService.cpp" />
+    <ClCompile Include="src\Services\Debug\DebugPrintFromManaged.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="vcpkg.json" />
+    <None Include="ext\imgui\imgui.natstepfilter" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Src/Util.hpp" />
+    <ClInclude Include="Src/Services.hpp" />
+    <ClInclude Include="Src/Services/DLSS.hpp">
+      <Filter>Services</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Services\Platform\D3D11.hpp">
+      <Filter>Services\Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Services\Platform\DXGI.hpp">
+      <Filter>Services\Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="ext\imgui\imconfig.h" />
+    <ClInclude Include="ext\imgui\imgui.h" />
+    <ClInclude Include="ext\imgui\imgui_impl_dx11.h" />
+    <ClInclude Include="ext\imgui\imgui_impl_win32.h" />
+    <ClInclude Include="ext\imgui\imgui_internal.h" />
+    <ClInclude Include="ext\imgui\imgui_stdlib.h" />
+    <ClInclude Include="ext\imgui\imstb_rectpack.h" />
+    <ClInclude Include="ext\imgui\imstb_textedit.h" />
+    <ClInclude Include="ext\imgui\imstb_truetype.h" />
+    <ClInclude Include="ext\nvsdk\nvsdk_ngx.h" />
+    <ClInclude Include="ext\nvsdk\nvsdk_ngx_defs.h" />
+    <ClInclude Include="ext\nvsdk\nvsdk_ngx_helpers.h" />
+    <ClInclude Include="ext\nvsdk\nvsdk_ngx_helpers_vk.h" />
+    <ClInclude Include="ext\nvsdk\nvsdk_ngx_params.h" />
+    <ClInclude Include="ext\nvsdk\nvsdk_ngx_vk.h" />
+    <ClInclude Include="src\Services\Platform\DXGI\_DXGI.hpp" />
+    <ClInclude Include="src\Services\Debug\Inspector.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Services">
+      <UniqueIdentifier>{92f92da7-4ba9-4de8-b467-4270596cac60}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Services\Platform">
+      <UniqueIdentifier>{a0b54771-8206-4da0-9a0e-e985e3823335}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Services\Debug">
+      <UniqueIdentifier>{121de974-f03d-41ac-a3cb-276e42625822}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="ext\imgui\imgui.natvis" />
+  </ItemGroup>
+</Project>
