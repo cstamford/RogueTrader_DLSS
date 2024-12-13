@@ -4,11 +4,13 @@ using Owlcat.Runtime.Visual.Waaagh.Passes;
 using Owlcat.Runtime.Visual.Waaagh.Passes.Base;
 using Owlcat.Runtime.Visual.Waaagh.Passes.PostProcess;
 using Owlcat.Runtime.Visual.Waaagh.RendererFeatures.Highlighting.Passes;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering.RenderGraphModule;
+using UnityEngine.Rendering;
 
 namespace EnhancedGraphics.Game;
 
@@ -74,45 +76,45 @@ public static class PatchCustomUpscalePass {
 
 [HarmonyPatch]
 public static class PatchUpscaleResolution {
-    [HarmonyPrefix]
+    [HarmonyPostfix]
     [HarmonyPatch(typeof(CameraData), nameof(CameraData.NonScaledCameraTargetViewportSize), MethodType.Getter)]
-    private static bool CameraData__NonScaledCameraTargetViewportSize(in CameraData __instance, ref Vector2Int __result) {
-        if (Util.CanApplyPipelineChanges(__instance)) {
+    private static void CameraData__NonScaledCameraTargetViewportSize(in CameraData __instance, ref Vector2Int __result) {
+        if (Util.CanUpscaleCamera(__instance)) {
             Vector2 display = EnhancedGraphics.Preset.DisplayResolution;
             __result = new((int)display.x, (int)display.y);
-            return false;
         }
-
-        return true;
     }
 
-    [HarmonyPrefix]
+    [HarmonyPostfix]
     [HarmonyPatch(typeof(CameraData), nameof(CameraData.ScaledCameraTargetViewportSize), MethodType.Getter)]
-    private static bool CameraData__ScaledCameraTargetViewportSize(in CameraData __instance, ref Vector2Int __result) {
-        if (Util.CanApplyPipelineChanges(__instance)) {
+    private static void CameraData__ScaledCameraTargetViewportSize(in CameraData __instance, ref Vector2Int __result) {
+        if (Util.CanUpscaleCamera(__instance)) {
             Vector2 render = EnhancedGraphics.Preset.RenderResolution;
             __result = new((int)render.x, (int)render.y);
-            return false;
         }
-
-        return true;
     }
 
     [HarmonyPostfix]
     [HarmonyPatch(typeof(WaaaghPipeline), nameof(WaaaghPipeline.InitializeCameraData))]
+    // This is called in multiple places: primary one is RenderCameraStack, for only the first camera.
     private static void WaaaghPipeline_InitializeCameraData(RenderGraph ___m_RenderGraph, ref CameraData cameraData) {
+        TextureDesc desc = Util.CreateColorTargetDesc("CameraColorUpscaled", cameraData.CameraTargetDescriptor, cameraData.NonScaledCameraTargetViewportSize);
+        if (!EnhancedGraphics.CameraColorUpscaled.IsValid()) {
+            EnhancedGraphics.CameraColorUpscaled = ___m_RenderGraph.CreateSharedTexture(desc, explicitRelease: true);
+        }
+
+        TextureDesc currentDesc = ___m_RenderGraph.GetTextureDesc(EnhancedGraphics.CameraColorUpscaled);
+        if (desc.width != currentDesc.width || desc.height != currentDesc.height) {
+            ___m_RenderGraph.RefreshSharedTextureDesc(EnhancedGraphics.CameraColorUpscaled, desc);
+        }
+    }
+
+    [HarmonyPostfix]
+    [HarmonyPatch(typeof(WaaaghPipeline), nameof(WaaaghPipeline.InitializeAdditionalCameraData))]
+    // This is called by InitializeCameraData, as well as called by RenderCameraStack for secondary cameras.
+    private static void WaaaghPipeline_InitializeAdditionalCameraData(RenderGraph ___m_RenderGraph, ref CameraData cameraData) {
         if (Util.CanApplyPipelineChanges(cameraData)) {
             cameraData.Antialiasing = AntialiasingMode.None;
-
-            TextureDesc desc = Util.CreateColorTargetDesc("CameraColorUpscaled", cameraData.CameraTargetDescriptor, cameraData.NonScaledCameraTargetViewportSize);
-            if (!EnhancedGraphics.CameraColorUpscaled.IsValid()) {
-                EnhancedGraphics.CameraColorUpscaled = ___m_RenderGraph.CreateSharedTexture(desc, explicitRelease: true);
-            }
-
-            TextureDesc currentDesc = ___m_RenderGraph.GetTextureDesc(EnhancedGraphics.CameraColorUpscaled);
-            if (desc.width != currentDesc.width || desc.height != currentDesc.height) {
-                ___m_RenderGraph.RefreshSharedTextureDesc(EnhancedGraphics.CameraColorUpscaled, desc);
-            }
         }
     }
 }
@@ -132,13 +134,18 @@ public static class PatchCameraColorBufferAccess {
     }
 
     private static void ScriptableRenderer_Execute_Impl(ScriptableRenderPass pass, ref RenderingData data) {
-#if false
-        EnhancedGraphics.DebugPrint($"{data.CameraData.Camera.name} {pass.Name} _dispatchedUpscale={_dispatchedUpscale}");
-#endif
+        if (Util.CanApplyPipelineChanges(data.CameraData) || _dispatchedUpscale) {
+            RenderGraphResources resources = data.CameraData.Renderer.RenderGraphResources;
+            resources.CameraColorBuffer = _dispatchedUpscale ? resources.m_CameraNonScaledColorBuffer : resources.CameraColorBuffer;
+        }
 
-        RenderGraphResources resources = data.CameraData.Renderer.RenderGraphResources;
-        resources.CameraColorBuffer = _dispatchedUpscale ? resources.m_CameraNonScaledColorBuffer : resources.CameraColorBuffer;
-        pass.Execute(ref data);
+        try {
+            pass.Execute(ref data);
+        } catch (Exception ex) {
+            EnhancedGraphics.DebugPrint($"Exception while recording pass {pass.Name}: {ex}");
+            throw;
+        }
+
         _dispatchedUpscale |= pass is UpscalePass;
     }
 
@@ -179,8 +186,11 @@ public static class PatchMipBias {
     [HarmonyPatch(typeof(SetCameraShaderVariablesPass), nameof(SetCameraShaderVariablesPass.Setup))]
     public static void SetCameraShaderVariablesPass_Setup(SetCameraShaderVariablesPassData data, ref RenderingData renderingData) {
         if (Util.CanApplyPipelineChanges(renderingData.CameraData)) {
-            float mipBias = Mathf.Log(renderingData.CameraData.ScaledCameraTargetViewportSize.x / renderingData.CameraData.NonScaledCameraTargetViewportSize.x, 2) - 1.0f;
-            data.GlobalMipBias = new Vector2(mipBias, Mathf.Pow(2.0f, mipBias));
+            float mipBiasBaseOffset = Mathf.Log((float)renderingData.CameraData.ScaledCameraTargetViewportSize.x / renderingData.CameraData.NonScaledCameraTargetViewportSize.x, 2);
+            float mipBiasOffset = EnhancedGraphics.GlobalMipBiasOffset + (mipBiasBaseOffset >= 0 ? 0 : mipBiasBaseOffset - 1.0f + float.Epsilon);
+            Vector2 mipBias = new(mipBiasOffset, Mathf.Pow(2.0f, mipBiasOffset));
+            data.GlobalMipBias = mipBias;
+            EnhancedGraphics.GlobalMipBias = mipBias;
         }
     }
 }
@@ -321,6 +331,31 @@ public static class PatchJitter {
             }
 
             return result;
+        }
+    }
+}
+
+[HarmonyPatch]
+public static class PatchDebuggingTools {
+    [HarmonyTranspiler]
+    [HarmonyPatch(typeof(WaaaghPipeline), nameof(WaaaghPipeline.RenderSingleCamera), [typeof(ScriptableRenderContext), typeof(CameraData)], [ArgumentType.Normal, ArgumentType.Ref])]
+    private static IEnumerable<CodeInstruction> WaaaghPipeline_InitializeAdditionalCameraData(IEnumerable<CodeInstruction> instructions) {
+        // Look for: context.Submit();, replace the .Submit call with our own call
+        foreach (CodeInstruction inst in instructions) {
+            if (inst.Calls(AccessTools.Method(typeof(ScriptableRenderContext), nameof(ScriptableRenderContext.Submit)))) {
+                yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(PatchDebuggingTools), nameof(SubmitWithExceptionHandling)));
+            } else {
+                yield return inst;
+            }
+        }
+    }
+
+    private static void SubmitWithExceptionHandling(in ScriptableRenderContext context) {
+        try {
+            context.Submit();
+        } catch (Exception ex) {
+            EnhancedGraphics.DebugPrint($"Exception while submitting camera draws: {ex}");
+            throw;
         }
     }
 }

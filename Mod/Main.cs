@@ -22,6 +22,7 @@ public class EGSettings : UnityModManager.ModSettings {
     public Vector2 JitterScale = Vector2.one * 2;
     public Vector2 JitterScaleToUpscale = Vector2.one;
     public UpscaleFlags Flags = UpscaleFlags.HDR | UpscaleFlags.MVRenderRes | UpscaleFlags.DepthInverted;
+    public float GlobalMipBiasOffset = 0.0f;
 
     public bool DebugSkipPostProcessing = false;
 
@@ -38,6 +39,13 @@ public static class EnhancedGraphics {
         get => _cameraColorUpscaled;
         set => _cameraColorUpscaled = value;
     }
+
+    public static Vector2 GlobalMipBias {
+        get => _globalMipBias;
+        set => _globalMipBias = value;
+    }
+
+    public static float GlobalMipBiasOffset => _settings.GlobalMipBiasOffset;
 
     public static IUpscaler Upscaler => _settings.SelectedUpscaler switch {
         nameof(DlssUpscaler) => _dlss,
@@ -215,6 +223,14 @@ public static class EnhancedGraphics {
             }
 
             GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"Global Mip Bias Offset: {_settings.GlobalMipBiasOffset:F2} (resolved: {GlobalMipBias.x:F2})");
+            _settings.GlobalMipBiasOffset = GUILayout.HorizontalSlider(_settings.GlobalMipBiasOffset, -5.0f, 5.0f);
+            if (GUILayout.Button("Reset")) {
+                _settings.GlobalMipBiasOffset = 0;
+            }
+            GUILayout.EndHorizontal();
         }
 
         GUILayout.BeginHorizontal();
@@ -260,6 +276,7 @@ public static class EnhancedGraphics {
     private static DlssUpscaler _dlss;
     private static Harmony _harmony;
     private static IUpscaler _upscalerLastFrame;
+    private static Vector2 _globalMipBias;
 
     [SaveOnReload]
     private static TextureHandle _cameraColorUpscaled;

@@ -1,5 +1,6 @@
 ﻿using Kingmaker.Settings;
 using Kingmaker.Settings.Graphics;
+using Kingmaker.Visual;
 using Owlcat.Runtime.Visual;
 using Owlcat.Runtime.Visual.Waaagh;
 using Owlcat.Runtime.Visual.Waaagh.Data;
@@ -35,11 +36,12 @@ public static class Util {
         return desc;
     }
 
-    public static bool CanScaleCamera(CameraData data) =>
+    public static bool CanUpscaleCamera(CameraData data) =>
         data.CameraRenderTargetBufferType == CameraRenderTargetType.Scaled &&
         data.UpscalingFilter == ImageUpscalingFilter.FSR;
 
     public static bool CanApplyPipelineChanges(CameraData data) =>
+        CanUpscaleCamera(data) &&
         EnhancedGraphics.Upscaler != null &&
-        CanScaleCamera(data);
+        CameraStackManager.Instance.GetCamera(CameraStackManager.CameraStackType.Main) == data.Camera;
 }
