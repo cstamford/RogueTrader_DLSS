@@ -13,7 +13,7 @@ Tested as of Rogue Trader 1.5.0.320
 
 ## Installation
 
-1. Get the latest release from [here](https://github.com/BradyBrenot/RogueTrader_DLSS/releases/latest)
+1. Get the latest release from [here](https://github.com/cstamford/RogueTrader_DLSS/releases/latest)
 2. Run the game at least once.
 3. Extract `EnhancedGraphics_Native.zip` to the game directory beside `WH40KRT.exe`
 4. Extract `EnhancedGraphics.zip` to the Owlcat Mods directory (Win+R, `%userprofile%/AppData/LocalLow/Owlcat Games/Warhammer 40000 Rogue Trader/UnityModManager/`)
@@ -32,9 +32,8 @@ Tested as of Rogue Trader 1.5.0.320
 
 ## Bugs
 
-See [here](https://github.com/BradyBrenot/RogueTrader_DLSS/issues) for a list of known issues and to report bugs.
+See [here](https://github.com/cstamford/RogueTrader_DLSS/issues) for a list of known issues and to report bugs.
 
 ## Credits
 
-1. Original mod: [cstamford](https://github.com/cstamford/RogueTrader_DLSS)
-2. `winhttp.dll`: [Ultimate-ASI-Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases)
+* `winhttp.dll`: [Ultimate-ASI-Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases)
