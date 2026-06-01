@@ -4,7 +4,7 @@ using Owlcat.Runtime.Visual.Waaagh.Passes;
 using Owlcat.Runtime.Visual.Waaagh.Passes.PostProcess;
 using UnityEngine;
 using UnityEngine.Assertions;
-using UnityEngine.Experimental.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering;
 
 namespace EnhancedGraphics.Game;

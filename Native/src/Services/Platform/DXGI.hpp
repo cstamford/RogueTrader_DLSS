@@ -16,9 +16,12 @@ std::string GetDebugName(DXGI_FORMAT);
 
 using FnCreateSwapChain = void (*)(IDXGISwapChain* swapChain, void* hwnd);
 using FnPresent = void (*)(IDXGISwapChain* swapChain);
+using FnVoid = void (*)();
 
 void On_CreateSwapChain(FnCreateSwapChain&& fn);
 void On_Present_Before(FnPresent&& fn);
 void On_Present_After(FnPresent&& fn);
+void On_ResizeBuffers(FnVoid&& fn);
+bool RegisterHooks();
 
 }

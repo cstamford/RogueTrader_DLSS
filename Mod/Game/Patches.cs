@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering;
 
 namespace EnhancedGraphics.Game;

@@ -10,7 +10,7 @@ extern struct Callbacks {
 extern struct State {
     ID3D11Device* Device;
     ID3D11DeviceContext* DeviceContext;
-} _state;
+} _d3d11State;
 
 ID3D11Device* Wrap(ID3D11Device* device);
 ID3D11DeviceContext* Wrap(ID3D11DeviceContext* deviceContext);

@@ -46,12 +46,12 @@ struct {
         bool Flip = true;
         std::string PinnedLabel;
     } ImGuiState;
-} _state;
+} _inspectorState;
 
 
 void Inspector::PinResourceForFrame(ID3D11Resource* resource)
 {
-    _state.PinnedResources.insert(D3D11::GetDebugName(resource));
+    _inspectorState.PinnedResources.insert(D3D11::GetDebugName(resource));
 }
 
 static void UpdateInspectorWindow(IDXGISwapChain*)
@@ -59,16 +59,16 @@ static void UpdateInspectorWindow(IDXGISwapChain*)
     ID3D11ShaderResourceView* srvPreview = nullptr;
 
     if (ImGui::Begin("Inspector")) {
-        ImGui::Text("Frame: %d", _state.Frame);
+        ImGui::Text("Frame: %d", _inspectorState.Frame);
         ImGui::Separator();
 
-        ImGui::Checkbox("Flip", &_state.ImGuiState.Flip);
+        ImGui::Checkbox("Flip", &_inspectorState.ImGuiState.Flip);
         ImGui::Separator();
 
-        std::vector<std::pair<ID3D11View*, FrameRenderTargetInfo>> sortedRts(_state.FrameRenderTargets.begin(), _state.FrameRenderTargets.end());
+        std::vector<std::pair<ID3D11View*, FrameRenderTargetInfo>> sortedRts(_inspectorState.FrameRenderTargets.begin(), _inspectorState.FrameRenderTargets.end());
         std::sort(sortedRts.begin(), sortedRts.end(), [](const auto& lhs, const auto& rhs) {
-            const bool lhsPinned = _state.PinnedResources.contains(lhs.second.TextureInfo.Name);
-            const bool rhsPinned = _state.PinnedResources.contains(rhs.second.TextureInfo.Name);
+            const bool lhsPinned = _inspectorState.PinnedResources.contains(lhs.second.TextureInfo.Name);
+            const bool rhsPinned = _inspectorState.PinnedResources.contains(rhs.second.TextureInfo.Name);
 
             if (lhsPinned != rhsPinned) {
                 return lhsPinned > rhsPinned;
@@ -99,10 +99,10 @@ static void UpdateInspectorWindow(IDXGISwapChain*)
 
             if (info.Srv) {
                 if (ImGui::ImageButton(labelPtr.c_str(), (ImTextureID)info.Srv, previewSize)) {
-                    _state.ImGuiState.PinnedLabel = _state.ImGuiState.PinnedLabel != labelPtr ? labelPtr : std::string();
+                    _inspectorState.ImGuiState.PinnedLabel = _inspectorState.ImGuiState.PinnedLabel != labelPtr ? labelPtr : std::string();
                 }
 
-                srvPreview = ImGui::IsItemHovered() || _state.ImGuiState.PinnedLabel == labelPtr ? info.Srv : srvPreview;
+                srvPreview = ImGui::IsItemHovered() || _inspectorState.ImGuiState.PinnedLabel == labelPtr ? info.Srv : srvPreview;
             }
         }
     }
@@ -112,8 +112,8 @@ static void UpdateInspectorWindow(IDXGISwapChain*)
     if (srvPreview) {
         const ImVec2 min = ImVec2(0, 0);
         const ImVec2 max = ImGui::GetIO().DisplaySize;
-        const ImVec2 uv0 = _state.ImGuiState.Flip ? ImVec2(0, 1) : ImVec2(0, 0);
-        const ImVec2 uv1 = _state.ImGuiState.Flip ? ImVec2(1, 0) : ImVec2(1, 1);
+        const ImVec2 uv0 = _inspectorState.ImGuiState.Flip ? ImVec2(0, 1) : ImVec2(0, 0);
+        const ImVec2 uv1 = _inspectorState.ImGuiState.Flip ? ImVec2(1, 0) : ImVec2(1, 1);
 
         ImGui::GetBackgroundDrawList()->AddRectFilled(min, max, IM_COL32(0, 0, 0, 255));
         ImGui::GetBackgroundDrawList()->AddImage((ImTextureID)srvPreview, min, max, uv0, uv1);
@@ -121,16 +121,16 @@ static void UpdateInspectorWindow(IDXGISwapChain*)
 
     std::vector<ID3D11View*> renderTargetsToClear;
 
-    for (auto& [rt, info] : _state.FrameRenderTargets) {
+    for (auto& [rt, info] : _inspectorState.FrameRenderTargets) {
         info.FrameRefCount = 0;
-        if (_state.Frame - info.LastSeenFrame >= 10) {
+        if (_inspectorState.Frame - info.LastSeenFrame >= 10) {
             renderTargetsToClear.push_back(rt);
         }
     }
 
     for (ID3D11View* rt : renderTargetsToClear) {
-        FrameRenderTargetInfo info = std::move(_state.FrameRenderTargets[rt]);
-        _state.FrameRenderTargets.erase(rt);
+        FrameRenderTargetInfo info = std::move(_inspectorState.FrameRenderTargets[rt]);
+        _inspectorState.FrameRenderTargets.erase(rt);
 
         if (info.Srv) {
             info.Srv->Release();
@@ -139,14 +139,14 @@ static void UpdateInspectorWindow(IDXGISwapChain*)
         rt->Release();
     }
 
-    _state.PinnedResources.clear();
+    _inspectorState.PinnedResources.clear();
 
-    ++_state.Frame;
+    ++_inspectorState.Frame;
 }
 
 static void OnSetRenderTarget(ID3D11View* rt)
 {
-    auto [it, inserted] = _state.FrameRenderTargets.try_emplace(rt, FrameRenderTargetInfo {});
+    auto [it, inserted] = _inspectorState.FrameRenderTargets.try_emplace(rt, FrameRenderTargetInfo {});
     FrameRenderTargetInfo& info = it->second;
 
     if (inserted) {
@@ -215,7 +215,7 @@ static void OnSetRenderTarget(ID3D11View* rt)
 
     ++info.RefCount;
     ++info.FrameRefCount;
-    info.LastSeenFrame = _state.Frame;
+    info.LastSeenFrame = _inspectorState.Frame;
 }
 
 static bool Initialize()

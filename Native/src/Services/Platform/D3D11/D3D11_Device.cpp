@@ -196,9 +196,9 @@ void D3D11DeviceWrapper::GetImmediateContext3(ID3D11DeviceContext3** ppImmediate
 {
     _device3->GetImmediateContext3(ppImmediateContext);
 
-    if (*ppImmediateContext && !_state.DeviceContext) {
+    if (*ppImmediateContext && !_d3d11State.DeviceContext) {
         *ppImmediateContext = (ID3D11DeviceContext3*)D3D11::Internal::Wrap(*ppImmediateContext);
-        _state.DeviceContext = *ppImmediateContext;
+        _d3d11State.DeviceContext = *ppImmediateContext;
     }
 }
 
@@ -221,9 +221,9 @@ void D3D11DeviceWrapper::GetImmediateContext2(ID3D11DeviceContext2** ppImmediate
 {
     _device2->GetImmediateContext2(ppImmediateContext);
 
-    if (*ppImmediateContext && !_state.DeviceContext) {
+    if (*ppImmediateContext && !_d3d11State.DeviceContext) {
         *ppImmediateContext = (ID3D11DeviceContext3*)D3D11::Internal::Wrap(*ppImmediateContext);
-        _state.DeviceContext = *ppImmediateContext;
+        _d3d11State.DeviceContext = *ppImmediateContext;
     }
 }
 
@@ -246,9 +246,9 @@ void D3D11DeviceWrapper::GetImmediateContext1(ID3D11DeviceContext1** ppImmediate
 {
     _device1->GetImmediateContext1(ppImmediateContext);
 
-    if (*ppImmediateContext && !_state.DeviceContext) {
+    if (*ppImmediateContext && !_d3d11State.DeviceContext) {
         *ppImmediateContext = (ID3D11DeviceContext3*)D3D11::Internal::Wrap(*ppImmediateContext);
-        _state.DeviceContext = *ppImmediateContext;
+        _d3d11State.DeviceContext = *ppImmediateContext;
     }
 }
 
@@ -471,9 +471,9 @@ void D3D11DeviceWrapper::GetImmediateContext(ID3D11DeviceContext** ppImmediateCo
 {
     _device->GetImmediateContext(ppImmediateContext);
 
-    if (*ppImmediateContext && !_state.DeviceContext) {
+    if (*ppImmediateContext && !_d3d11State.DeviceContext) {
         *ppImmediateContext = (ID3D11DeviceContext3*)D3D11::Internal::Wrap(*ppImmediateContext);
-        _state.DeviceContext = *ppImmediateContext;
+        _d3d11State.DeviceContext = *ppImmediateContext;
     }
 }
 

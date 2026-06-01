@@ -15,7 +15,7 @@ using FnWndProc = LRESULT(WINAPI*)(HWND, UINT, WPARAM, LPARAM);
 struct {
     HWND Window;
     ID3D11RenderTargetView* Rtv;
-} _state;
+} _imguiState;
 
 struct {
     FnWndProc WndProc;
@@ -38,15 +38,15 @@ static LRESULT WINAPI Hook_WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
 
 static void CreateInspectorWindow(IDXGISwapChain* sc, void* hwnd)
 {
-    if (_state.Window) {
+    if (_imguiState.Window) {
         LOG_WARNING("The inspector window was already initialized when a new device was created.\n");
         return;
     }
 
-    _state.Window = (HWND)hwnd;
+    _imguiState.Window = (HWND)hwnd;
 
-    _originals.WndProc = (FnWndProc)GetWindowLongPtr(_state.Window, GWLP_WNDPROC);
-    SetWindowLongPtr(_state.Window, GWLP_WNDPROC, (LONG_PTR)Hook_WndProc);
+    _originals.WndProc = (FnWndProc)GetWindowLongPtr(_imguiState.Window, GWLP_WNDPROC);
+    SetWindowLongPtr(_imguiState.Window, GWLP_WNDPROC, (LONG_PTR)Hook_WndProc);
 
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
@@ -67,7 +67,7 @@ static void UpdateInspectorWindow_EndFrame(IDXGISwapChain* swapChain)
 {
     assert(swapChain);
 
-    if (!_state.Rtv) {
+    if (!_imguiState.Rtv) {
         ID3D11Texture2D* backBuffer = nullptr;
         swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
         assert(backBuffer);
@@ -80,12 +80,12 @@ static void UpdateInspectorWindow_EndFrame(IDXGISwapChain* swapChain)
             .ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D
         };
 
-        DISCARD(D3D11::GetDevice()->CreateRenderTargetView(backBuffer, &rtvDesc, &_state.Rtv));
+        DISCARD(D3D11::GetDevice()->CreateRenderTargetView(backBuffer, &rtvDesc, &_imguiState.Rtv));
         backBuffer->Release();
     }
 
-    assert(_state.Rtv);
-    D3D11::GetImmediateContext()->OMSetRenderTargets(1, &_state.Rtv, nullptr);
+    assert(_imguiState.Rtv);
+    D3D11::GetImmediateContext()->OMSetRenderTargets(1, &_imguiState.Rtv, nullptr);
 
     ImGui::Render();
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());

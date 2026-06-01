@@ -7,7 +7,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.RenderGraphModule;
 using UnityModManagerNet;
 
 namespace EnhancedGraphics;
@@ -25,6 +25,8 @@ public class EGSettings : UnityModManager.ModSettings {
     public float GlobalMipBiasOffset = 0.0f;
 
     public bool DebugSkipPostProcessing = false;
+    
+    public bool DebugOptions = false;
 
     public override void Save(UnityModManager.ModEntry modEntry) {
         Save(this, modEntry);
@@ -171,72 +173,80 @@ public static class EnhancedGraphics {
                 _settings.CustomPreset[_settings.SelectedUpscaler] = preset;
                 _settings.SelectedPreset[_settings.SelectedUpscaler] = preset.Name;
             }
-
+            
             GUILayout.BeginHorizontal();
-            GUILayout.Label("Mvec Scale To Upscale");
-            GUILayout.Label($"X: {_settings.MvecScaleToUpscale.x:F2}");
-            _settings.MvecScaleToUpscale.x = GUILayout.HorizontalSlider(_settings.MvecScaleToUpscale.x, -5.0f, 5.0f);
-            GUILayout.Label($"Y: {_settings.MvecScaleToUpscale.y:F2}");
-            _settings.MvecScaleToUpscale.y = GUILayout.HorizontalSlider(_settings.MvecScaleToUpscale.y, -5.0f, 5.0f);
-            if (GUILayout.Button("Reset")) {
-                _settings.MvecScaleToUpscale = -Vector2.one;
-            }
+            _settings.DebugOptions = GUILayout.Toggle(_settings.DebugOptions, "Enable Debug Options");
             GUILayout.EndHorizontal();
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Jitter Scale");
-            GUILayout.Label($"X: {_settings.JitterScale.x:F2}");
-            _settings.JitterScale.x = GUILayout.HorizontalSlider(_settings.JitterScale.x, -5.0f, 5.0f);
-            GUILayout.Label($"Y: {_settings.JitterScale.y:F2}");
-            _settings.JitterScale.y = GUILayout.HorizontalSlider(_settings.JitterScale.y, -5.0f, 5.0f);
-            if (GUILayout.Button("Reset")) {
-                _settings.JitterScale = Vector2.one * 2;
-            }
-            GUILayout.EndHorizontal();
+            if (_settings.DebugOptions) {
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Mvec Scale To Upscale");
+                GUILayout.Label($"X: {_settings.MvecScaleToUpscale.x:F2}");
+                _settings.MvecScaleToUpscale.x = GUILayout.HorizontalSlider(_settings.MvecScaleToUpscale.x, -5.0f, 5.0f);
+                GUILayout.Label($"Y: {_settings.MvecScaleToUpscale.y:F2}");
+                _settings.MvecScaleToUpscale.y = GUILayout.HorizontalSlider(_settings.MvecScaleToUpscale.y, -5.0f, 5.0f);
+                if (GUILayout.Button("Reset")) {
+                    _settings.MvecScaleToUpscale = -Vector2.one;
+                }
+                GUILayout.EndHorizontal();
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Jitter Scale To Upscale");
-            GUILayout.Label($"X: {_settings.JitterScaleToUpscale.x:F2}");
-            _settings.JitterScaleToUpscale.x = GUILayout.HorizontalSlider(_settings.JitterScaleToUpscale.x, -5.0f, 5.0f);
-            GUILayout.Label($"Y: {_settings.JitterScaleToUpscale.y:F2}");
-            _settings.JitterScaleToUpscale.y = GUILayout.HorizontalSlider(_settings.JitterScaleToUpscale.y, -5.0f, 5.0f);
-            if (GUILayout.Button("Reset")) {
-                _settings.JitterScaleToUpscale = Vector2.one;
-            }
-            GUILayout.EndHorizontal();
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Jitter Scale");
+                GUILayout.Label($"X: {_settings.JitterScale.x:F2}");
+                _settings.JitterScale.x = GUILayout.HorizontalSlider(_settings.JitterScale.x, -5.0f, 5.0f);
+                GUILayout.Label($"Y: {_settings.JitterScale.y:F2}");
+                _settings.JitterScale.y = GUILayout.HorizontalSlider(_settings.JitterScale.y, -5.0f, 5.0f);
+                if (GUILayout.Button("Reset")) {
+                    _settings.JitterScale = Vector2.one * 2;
+                }
+                GUILayout.EndHorizontal();
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Flags");
-            List<string> flagOptions = [.. Enum.GetNames(typeof(UpscaleFlags))];
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Jitter Scale To Upscale");
+                GUILayout.Label($"X: {_settings.JitterScaleToUpscale.x:F2}");
+                _settings.JitterScaleToUpscale.x = GUILayout.HorizontalSlider(_settings.JitterScaleToUpscale.x, -5.0f, 5.0f);
+                GUILayout.Label($"Y: {_settings.JitterScaleToUpscale.y:F2}");
+                _settings.JitterScaleToUpscale.y = GUILayout.HorizontalSlider(_settings.JitterScaleToUpscale.y, -5.0f, 5.0f);
+                if (GUILayout.Button("Reset")) {
+                    _settings.JitterScaleToUpscale = Vector2.one;
+                }
+                GUILayout.EndHorizontal();
 
-            foreach (string flag in Enum.GetNames(typeof(UpscaleFlags)).Skip(1)) {
-                UpscaleFlags flagValue = (UpscaleFlags)Enum.Parse(typeof(UpscaleFlags), flag);
-                bool flagEnabled = _settings.Flags.HasFlag(flagValue);
-                bool newFlagEnabled = GUILayout.Toggle(flagEnabled, flag);
-                if (newFlagEnabled != flagEnabled) {
-                    if (newFlagEnabled) {
-                        _settings.Flags |= flagValue;
-                    } else {
-                        _settings.Flags &= ~flagValue;
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Flags");
+                List<string> flagOptions = [.. Enum.GetNames(typeof(UpscaleFlags))];
+
+                foreach (string flag in Enum.GetNames(typeof(UpscaleFlags)).Skip(1)) {
+                    UpscaleFlags flagValue = (UpscaleFlags)Enum.Parse(typeof(UpscaleFlags), flag);
+                    bool flagEnabled = _settings.Flags.HasFlag(flagValue);
+                    bool newFlagEnabled = GUILayout.Toggle(flagEnabled, flag);
+                    if (newFlagEnabled != flagEnabled) {
+                        if (newFlagEnabled) {
+                            _settings.Flags |= flagValue;
+                        } else {
+                            _settings.Flags &= ~flagValue;
+                        }
                     }
                 }
-            }
 
-            GUILayout.EndHorizontal();
+                GUILayout.EndHorizontal();
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label($"Global Mip Bias Offset: {_settings.GlobalMipBiasOffset:F2} (resolved: {GlobalMipBias.x:F2})");
-            _settings.GlobalMipBiasOffset = GUILayout.HorizontalSlider(_settings.GlobalMipBiasOffset, -5.0f, 5.0f);
-            if (GUILayout.Button("Reset")) {
-                _settings.GlobalMipBiasOffset = 0;
+                GUILayout.BeginHorizontal();
+                GUILayout.Label($"Global Mip Bias Offset: {_settings.GlobalMipBiasOffset:F2} (resolved: {GlobalMipBias.x:F2})");
+                _settings.GlobalMipBiasOffset = GUILayout.HorizontalSlider(_settings.GlobalMipBiasOffset, -5.0f, 5.0f);
+                if (GUILayout.Button("Reset")) {
+                    _settings.GlobalMipBiasOffset = 0;
+                }
+                GUILayout.EndHorizontal();
             }
-            GUILayout.EndHorizontal();
         }
 
-        GUILayout.BeginHorizontal();
-        GUILayout.Label("Debug Skip Post Processing");
-        _settings.DebugSkipPostProcessing = GUILayout.Toggle(_settings.DebugSkipPostProcessing, "");
-        GUILayout.EndHorizontal();
+        if (_settings.DebugOptions) {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Debug Skip Post Processing");
+            _settings.DebugSkipPostProcessing = GUILayout.Toggle(_settings.DebugSkipPostProcessing, "");
+            GUILayout.EndHorizontal();
+        }
 
         GUILayout.EndVertical();
     }

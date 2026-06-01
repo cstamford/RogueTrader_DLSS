@@ -14,12 +14,19 @@ struct ServiceFlags {
     };
 };
 
+struct DirectHook {
+    const wchar_t* Module;
+    const char* FunctionName;
+    void* HookFunction;
+};
+
 struct ServiceInfo {
     const char* Name;
     enum ServiceFlags::Enum Flags = ServiceFlags::None;
     FnServiceInitialize FnInitialize = nullptr;
     FnServiceGetHook FnGetHook = nullptr;
     FnServiceSetHookOriginal FnSetHookOriginal = nullptr;
+    std::vector<DirectHook> DirectHooks;
 };
 
 void InitializeServices();

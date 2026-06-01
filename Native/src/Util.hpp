@@ -1,6 +1,11 @@
 #pragma once
 
+#pragma push_macro("FMT_UNICODE")
+#define FMT_UNICODE 0
 #include <fmt/format.h>
+#undef FMT_UNICODE
+#pragma pop_macro("FMT_UNICODE")
+
 #include <MinHook.h>
 #include <Windows.h>
 

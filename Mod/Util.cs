@@ -6,7 +6,7 @@ using Owlcat.Runtime.Visual.Waaagh;
 using Owlcat.Runtime.Visual.Waaagh.Data;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
-using UnityEngine.Experimental.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering;
 
 namespace EnhancedGraphics;

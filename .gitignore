@@ -9,3 +9,5 @@ vcpkg_installed
 x64
 x86
 Releases/
+.idea/
+GamePath.props

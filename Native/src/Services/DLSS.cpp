@@ -26,7 +26,7 @@ struct {
     QualityMode Mode;
     EvaluationFlags Flags; 
     std::unique_ptr<NVSDK_NGX_D3D11_DLSS_Eval_Params> PendingEvalParams;
-} _state;
+} _dlssState;
 
 static void Initialize(ID3D11Device* device, ID3D11DeviceContext* immediateContext);
 static int GetQualityModes_Impl(uint32_t finalWidth, uint32_t finalHeight, QualityMode* outQualityModes);
@@ -35,28 +35,28 @@ static void Evaluate_Impl(RenderResource colorIn, RenderResource colorOut, float
 
 int WINAPI GetQualityModes(uint32_t finalWidth, uint32_t finalHeight, QualityMode* outQualityModes)
 {
-    std::lock_guard _(_state.Lock);
+    std::lock_guard _(_dlssState.Lock);
     Initialize(D3D11::GetDevice(), D3D11::GetImmediateContext());
     return GetQualityModes_Impl(finalWidth, finalHeight, outQualityModes);
 }
 
 void WINAPI SetQualityMode(const QualityMode* mode, const EvaluationFlags flags)
 {
-    std::lock_guard _(_state.Lock);
+    std::lock_guard _(_dlssState.Lock);
     Initialize(D3D11::GetDevice(), D3D11::GetImmediateContext());
     SetQualityMode_Impl(mode, flags);
 }
 
 void WINAPI Evaluate(RenderResource colorIn, RenderResource colorOut, float sharpness, const EvaluationParams* params)
 {
-    std::lock_guard _(_state.Lock);
+    std::lock_guard _(_dlssState.Lock);
     Initialize(D3D11::GetDevice(), D3D11::GetImmediateContext());
     Evaluate_Impl(colorIn, colorOut, sharpness, params);
 }
 
 static int GetQualityModes_Impl(uint32_t finalWidth, uint32_t finalHeight, QualityMode* outQualityModes)
 {
-    assert(_state.Initialized);
+    assert(_dlssState.Initialized);
 
     NVSDK_NGX_Parameter* params = nullptr;
 
@@ -111,27 +111,27 @@ static int GetQualityModes_Impl(uint32_t finalWidth, uint32_t finalHeight, Quali
 
 static void SetQualityMode_Impl(const QualityMode* mode, const EvaluationFlags flags)
 {
-    assert(_state.Initialized);
+    assert(_dlssState.Initialized);
 
-    if (_state.Handle) {
-        if (_state.Mode.InputWidth == mode->InputWidth &&
-            _state.Mode.InputHeight == mode->InputHeight &&
-            _state.Mode.FinalWidth == mode->FinalWidth &&
-            _state.Mode.FinalHeight == mode->FinalHeight &&
-            _state.Flags == flags
+    if (_dlssState.Handle) {
+        if (_dlssState.Mode.InputWidth == mode->InputWidth &&
+            _dlssState.Mode.InputHeight == mode->InputHeight &&
+            _dlssState.Mode.FinalWidth == mode->FinalWidth &&
+            _dlssState.Mode.FinalHeight == mode->FinalHeight &&
+            _dlssState.Flags == flags
         ) {
             return; // Already selected, no need to recreate.
         }
 
-        DISCARD(NVSDK_NGX_D3D11_ReleaseFeature(_state.Handle));
-        DISCARD(NVSDK_NGX_D3D11_DestroyParameters(_state.Params));
+        DISCARD(NVSDK_NGX_D3D11_ReleaseFeature(_dlssState.Handle));
+        DISCARD(NVSDK_NGX_D3D11_DestroyParameters(_dlssState.Params));
 
-        _state.Handle = nullptr;
-        _state.Params = nullptr;
+        _dlssState.Handle = nullptr;
+        _dlssState.Params = nullptr;
     }
 
-    assert(!_state.Handle);
-    assert(!_state.Params);
+    assert(!_dlssState.Handle);
+    assert(!_dlssState.Params);
 
     NVSDK_NGX_Parameter* params = nullptr;
 
@@ -166,18 +166,18 @@ static void SetQualityMode_Impl(const QualityMode* mode, const EvaluationFlags f
         return;
     }
 
-    _state.Handle = handle;
-    _state.Params = params;
-    _state.Mode = *mode;
-    _state.Flags = flags;
+    _dlssState.Handle = handle;
+    _dlssState.Params = params;
+    _dlssState.Mode = *mode;
+    _dlssState.Flags = flags;
 }
 
 static void Evaluate_Impl(RenderResource colorIn, RenderResource colorOut, float sharpness, const EvaluationParams* params)
 {
-    assert(_state.Initialized);
-    assert(_state.Handle);
-    assert(_state.Params);
-    assert(!_state.PendingEvalParams);
+    assert(_dlssState.Initialized);
+    assert(_dlssState.Handle);
+    assert(_dlssState.Params);
+    assert(!_dlssState.PendingEvalParams);
 
     assert(colorIn);
     assert(colorOut);
@@ -196,7 +196,7 @@ static void Evaluate_Impl(RenderResource colorIn, RenderResource colorOut, float
         .pInMotionVectors = (ID3D11Resource*)params->MvecIn,
         .InJitterOffsetX = params->JitterX,
         .InJitterOffsetY = params->JitterY,
-        .InRenderSubrectDimensions = { .Width = _state.Mode.InputWidth, .Height = _state.Mode.InputHeight },
+        .InRenderSubrectDimensions = { .Width = _dlssState.Mode.InputWidth, .Height = _dlssState.Mode.InputHeight },
         .InReset = params->Reset,
         .InMVScaleX = params->MVecScaleX,
         .InMVScaleY = params->MVecScaleY,
@@ -213,14 +213,16 @@ static void Evaluate_Impl(RenderResource colorIn, RenderResource colorOut, float
     Inspector::PinResourceForFrame(evalParams.pInDepth);
     Inspector::PinResourceForFrame(evalParams.pInMotionVectors);
 
-    _state.PendingEvalParams = std::make_unique<NVSDK_NGX_D3D11_DLSS_Eval_Params>(evalParams);
+    _dlssState.PendingEvalParams = std::make_unique<NVSDK_NGX_D3D11_DLSS_Eval_Params>(evalParams);
 }
 
 static void Initialize_RunTests();
 
+thread_local int inUpscale = 0;
+
 static void Initialize(ID3D11Device* device, ID3D11DeviceContext* immediateContext)
 {
-    if (_state.Initialized) {
+    if (_dlssState.Initialized) {
         return;
     }
 
@@ -231,6 +233,7 @@ static void Initialize(ID3D11Device* device, ID3D11DeviceContext* immediateConte
             .LoggingCallback = [](const char* msg, NVSDK_NGX_Logging_Level level, NVSDK_NGX_Feature source) {
                 LOG(level == NVSDK_NGX_LOGGING_LEVEL_VERBOSE ? LogLevel::Debug : LogLevel::Info, "NGX: {}", msg);
             },
+            .MinimumLoggingLevel = NVSDK_NGX_LOGGING_LEVEL_VERBOSE,
             .DisableOtherLoggingSinks = true }
     };
 
@@ -299,10 +302,16 @@ static void Initialize(ID3D11Device* device, ID3D11DeviceContext* immediateConte
     });
 
     D3D11::On_SetRenderTargets([](const std::vector<ID3D11RenderTargetView*>& rtvs, ID3D11DepthStencilView* dsv) {
-        std::lock_guard _(_state.Lock);
+        if (inUpscale)
+        {
+            // Maybe intercepting optiscaler, let's let it go
+            return;
+        }
+        
+        std::lock_guard _(_dlssState.Lock);
 
         ID3D11RenderTargetView* match = nullptr;
-        NVSDK_NGX_D3D11_DLSS_Eval_Params* params = _state.PendingEvalParams.get();
+        NVSDK_NGX_D3D11_DLSS_Eval_Params* params = _dlssState.PendingEvalParams.get();
 
         if (first && params) {
             for (ID3D11RenderTargetView* rtv : rtvs) {
@@ -323,10 +332,10 @@ static void Initialize(ID3D11Device* device, ID3D11DeviceContext* immediateConte
         if (match) {
             // Validate that all the resources still match (this can fail if any resizing is happening).
             std::vector<std::tuple<ID3D11Resource*, uint32_t, uint32_t>> inputs = {
-                { params->Feature.pInColor, _state.Mode.InputWidth, _state.Mode.InputHeight },
-                { params->Feature.pInOutput, _state.Mode.FinalWidth, _state.Mode.FinalHeight },
-                { params->pInDepth, _state.Mode.InputWidth, _state.Mode.InputHeight },
-                { params->pInMotionVectors, _state.Mode.InputWidth, _state.Mode.InputHeight },
+                { params->Feature.pInColor, _dlssState.Mode.InputWidth, _dlssState.Mode.InputHeight },
+                { params->Feature.pInOutput, _dlssState.Mode.FinalWidth, _dlssState.Mode.FinalHeight },
+                { params->pInDepth, _dlssState.Mode.InputWidth, _dlssState.Mode.InputHeight },
+                { params->pInMotionVectors, _dlssState.Mode.InputWidth, _dlssState.Mode.InputHeight },
             };
 
             bool validationFailure = false;
@@ -345,7 +354,9 @@ static void Initialize(ID3D11Device* device, ID3D11DeviceContext* immediateConte
             }
 
             if (!validationFailure) {
-                DISCARD(NGX_D3D11_EVALUATE_DLSS_EXT(D3D11::GetImmediateContext(), _state.Handle, _state.Params, params));
+                ++inUpscale;
+                DISCARD(NGX_D3D11_EVALUATE_DLSS_EXT(D3D11::GetImmediateContext(), _dlssState.Handle, _dlssState.Params, params));
+                --inUpscale;
             } else {
                 const float rgba[] = { 1.0f, 0.0f, 0.0f, 1.0f };
                 D3D11::GetImmediateContext()->ClearRenderTargetView(match, rgba);
@@ -356,12 +367,24 @@ static void Initialize(ID3D11Device* device, ID3D11DeviceContext* immediateConte
             params->pInDepth->Release();
             params->pInMotionVectors->Release();
 
-            _state.PendingEvalParams.reset();
+            _dlssState.PendingEvalParams.reset();
             first = false;
         }
     });
+    
+    DXGI::On_ResizeBuffers([]() {
+        if (const NVSDK_NGX_D3D11_DLSS_Eval_Params* params = _dlssState.PendingEvalParams.get())
+        {
+            params->Feature.pInColor->Release();
+            params->Feature.pInOutput->Release();
+            params->pInDepth->Release();
+            params->pInMotionVectors->Release();
 
-    _state.Initialized = true;
+            _dlssState.PendingEvalParams.reset();
+        }
+    });
+
+    _dlssState.Initialized = true;
 
     Initialize_RunTests();
 }
@@ -372,7 +395,7 @@ static void Initialize_RunTests()
     return;
 #endif
 
-    assert(_state.Initialized);
+    assert(_dlssState.Initialized);
 
     int numModes = GetQualityModes(1920, 1080, nullptr);
     assert(numModes > 0);
@@ -382,19 +405,19 @@ static void Initialize_RunTests()
     assert(numModesWithData > 0);
 
     SetQualityMode(&modes[0], {});
-    assert(_state.Handle);
-    assert(_state.Params);
+    assert(_dlssState.Handle);
+    assert(_dlssState.Params);
 
-    NVSDK_NGX_Handle* handle = _state.Handle;
-    NVSDK_NGX_Parameter* params = _state.Params;
+    NVSDK_NGX_Handle* handle = _dlssState.Handle;
+    NVSDK_NGX_Parameter* params = _dlssState.Params;
 
     SetQualityMode(&modes[0], {});
-    assert(_state.Handle == handle);
-    assert(_state.Params == params);
+    assert(_dlssState.Handle == handle);
+    assert(_dlssState.Params == params);
 
     SetQualityMode(&modes[1], {});
-    assert(_state.Handle && _state.Handle != handle);
-    assert(_state.Params && _state.Params != params);
+    assert(_dlssState.Handle && _dlssState.Handle != handle);
+    assert(_dlssState.Params && _dlssState.Params != params);
 }
 
 static bool Initialize()
