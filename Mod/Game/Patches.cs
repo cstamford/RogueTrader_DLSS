@@ -3,10 +3,12 @@ using Owlcat.Runtime.Visual.Waaagh;
 using Owlcat.Runtime.Visual.Waaagh.Passes;
 using Owlcat.Runtime.Visual.Waaagh.Passes.Base;
 using Owlcat.Runtime.Visual.Waaagh.Passes.PostProcess;
+using Owlcat.Runtime.Visual.Waaagh.RendererFeatures.CustomPostProcess.Passes;
 using Owlcat.Runtime.Visual.Waaagh.RendererFeatures.Highlighting.Passes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using Kingmaker.EntitySystem.Entities;
@@ -191,16 +193,64 @@ public static class PatchFullResolutionPostProcessing {
 }
 
 [HarmonyPatch]
+public static class PatchFullResolutionCustomPostProcessing {
+    // CustomPostProcessPass (warp corruption/misc; enqueued only while CustomPostProcessOverride volume is active).
+    // Its ping-pong temp is sized from CameraTargetDescriptor, which for a Scaled camera is
+    // the *render* resolution - but by then CameraColorBuffer already holds our display-resolution DLSS
+    // output. Each active effect therefore downsamples the frame into the render-res temp, and the final blit stretches it back up:
+    // the whole image degrades to a bilinear upscale for as long as the effect is active.
+    // Same descriptor problem PatchFullResolutionPostProcessing fixes for PostProcessPass.
+    private static readonly FieldInfo _descField = typeof(CustomPostProcessPass)
+        .GetNestedTypes(AccessTools.all)
+        .SelectMany(t => t.GetFields(AccessTools.all))
+        .FirstOrDefault(f => f.FieldType == typeof(TextureDesc));
+
+    [HarmonyTranspiler]
+    [HarmonyPatch(typeof(CustomPostProcessPass), nameof(CustomPostProcessPass.RecordRenderGraph))]
+    private static IEnumerable<CodeInstruction> CustomPostProcessPass_RecordRenderGraph(IEnumerable<CodeInstruction> instructions) {
+        foreach (CodeInstruction inst in instructions) {
+            if (_descField != null && inst.StoresField(_descField)) {
+                yield return new(OpCodes.Ldarg_1);
+                yield return new(OpCodes.Call, AccessTools.Method(typeof(PatchFullResolutionCustomPostProcessing), nameof(ModifyCustomPostProcessingDesc)));
+            }
+
+            yield return inst;
+        }
+    }
+
+    private static TextureDesc ModifyCustomPostProcessingDesc(TextureDesc current, in RenderingData renderingData) =>
+        Util.CanApplyPipelineChanges(renderingData.CameraData) ? current with {
+            width = renderingData.CameraData.NonScaledCameraTargetViewportSize.x,
+            height = renderingData.CameraData.NonScaledCameraTargetViewportSize.y
+        } : current;
+}
+
+[HarmonyPatch]
 public static class PatchMipBias {
     [HarmonyPostfix]
     [HarmonyPatch(typeof(SetCameraShaderVariablesPass), nameof(SetCameraShaderVariablesPass.Setup))]
     public static void SetCameraShaderVariablesPass_Setup(SetCameraShaderVariablesPassData data, ref RenderingData renderingData) {
         if (Util.CanApplyPipelineChanges(renderingData.CameraData)) {
-            float mipBiasBaseOffset = Mathf.Log((float)renderingData.CameraData.ScaledCameraTargetViewportSize.x / renderingData.CameraData.NonScaledCameraTargetViewportSize.x, 2);
-            float mipBiasOffset = EnhancedGraphics.GlobalMipBiasOffset + (mipBiasBaseOffset >= 0 ? 0 : mipBiasBaseOffset - 1.0f + float.Epsilon);
+            // Note: RT now includes a more conservative mip bias by default. Therefore, the debug slider becomes a flat offset.
+            float mipBiasOffset = EnhancedGraphics.GlobalMipBiasOffset + data.GlobalMipBias.x;
             Vector2 mipBias = new(mipBiasOffset, Mathf.Pow(2.0f, mipBiasOffset));
             data.GlobalMipBias = mipBias;
             EnhancedGraphics.GlobalMipBias = mipBias;
+        }
+    }
+}
+
+[HarmonyPatch]
+public static class PatchMotionVectorHistory {
+    // Fixes intermittent image instability (looks like jitter/AA has been disabled) when resizing camera buffer.
+    // Detect that first-frame-after-(re)create state (LastFrameId == 0) on our upscaled camera and emit zero motion
+    // Zero motion is the correct fallback when there is no valid history reference.
+    [HarmonyPostfix]
+    [HarmonyPatch(typeof(CameraMotionVectorsPass), nameof(CameraMotionVectorsPass.Setup))]
+    private static void CameraMotionVectorsPass_Setup(CameraMotionVectorsPassData data, ref RenderingData renderingData) {
+        WaaaghCameraBuffer buffer = renderingData.CameraData.CameraBuffer;
+        if (Util.CanApplyPipelineChanges(renderingData.CameraData) && buffer.LastFrameId == 0) {
+            data.PrevVP = data.UnjitteredVP;
         }
     }
 }
@@ -270,7 +320,6 @@ public static class PatchUpscalingThreshold {
 
 [HarmonyPatch]
 public static class PatchJitter {
-
     [HarmonyTranspiler]
     [HarmonyPatch(typeof(WaaaghPipeline), nameof(WaaaghPipeline.InitializeAdditionalCameraData))]
     private static IEnumerable<CodeInstruction> WaaaghPipeline_InitializeAdditionalCameraData(IEnumerable<CodeInstruction> instructions) {
