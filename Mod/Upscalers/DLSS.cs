@@ -55,28 +55,34 @@ public class DlssUpscaler : IUpscaler {
             FinalHeight = (uint)preset.DisplayResolution.y
         };
 
+        EvaluationFlags newFlags = EvaluationFlags.None;
+
         if (flags.HasFlag(UpscaleFlags.HDR)) {
-            _evalFlags |= EvaluationFlags.IsHDR;
+            newFlags |= EvaluationFlags.IsHDR;
         }
 
         if (flags.HasFlag(UpscaleFlags.MVRenderRes)) {
-            _evalFlags |= EvaluationFlags.MVRenderRes;
+            newFlags |= EvaluationFlags.MVRenderRes;
         }
 
         if (flags.HasFlag(UpscaleFlags.MVJitter)) {
-            _evalFlags |= EvaluationFlags.MVJittered;
+            newFlags |= EvaluationFlags.MVJittered;
         }
 
         if (flags.HasFlag(UpscaleFlags.DepthInverted)) {
-            _evalFlags |= EvaluationFlags.DepthInverted;
+            newFlags |= EvaluationFlags.DepthInverted;
         }
 
         if (flags.HasFlag(UpscaleFlags.AutoExposure)) {
-            _evalFlags |= EvaluationFlags.AutoExposure;
+            newFlags |= EvaluationFlags.AutoExposure;
         }
 
         if (flags.HasFlag(UpscaleFlags.AlphaUpscaling)) {
-            _evalFlags |= EvaluationFlags.AlphaUpscaling;
+            newFlags |= EvaluationFlags.AlphaUpscaling;
+        }
+
+        if (newFlags != _evalFlags) {
+            EvalFlags = newFlags;
         }
 
         return true;
